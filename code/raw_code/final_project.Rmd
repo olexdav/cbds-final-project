@@ -22,7 +22,7 @@ library(ggthemes)
 library(knitr)
 
 ## set working directory
-knitr::opts_knit$set(root.dir = '/cloud/project')
+knitr::opts_knit$set(root.dir = '/cloud/project/cbds-final-project')
 ```
 
 ### The Data
@@ -59,39 +59,80 @@ atus.all <- atus.sum %>%
 ### Exploratory Analysis of Child Care Data
 
 ```{r initial-exploration}
-### Add Code Here
+glimpse(atus.sum)
+glimpse(atus.cps)
+# average time socializing and communicating with others 
+mean(atus.all$t120101)
 ```
 
 
 ```{r creating-childcare-var}
 atus.all <- atus.all %>% 
-    mutate(CHILDCARE = )
+    mutate(CHILDCARE = t030101+t030102+t030103+t030104+t030105
+           +t030106+t030108+t030109+t030110+t030111+t030112+t030199)
 ```
 
 ```{r childcare-density-plot}
 ggplot(atus.all) +
-    geom_density()
+    geom_density(aes(x = CHILDCARE))
 ```
 
 ```{r gender-analysis}
+#colnames(atus.all)
+#head(atus.cps)
 atus.all %>% 
-    group_by() %>% 
-    FUNCTION()
+    group_by(TESEX) %>% 
+    summarize(n_minutes=mean(CHILDCARE))
 ```
 
 ```{r replacing-na}
 ## replace -1 in the variable TRDPFTPT with NA.
+#table(atus.all$TRDPFTPT)
+#head(atus.all$TRDPFTPT)
+atus.all <- atus.all %>% mutate(TRDPFTPT = replace(TRDPFTPT, TRDPFTPT == -1, NA))
 ```
 
 ```{r exploratory-analysis}
-## add your exploratory analysis code here
+## Exclude households without children
+atus.all <- atus.all %>%
+  filter(TRCHILDNUM > 1)
+## Do younger parents spend more time with their children?
+care_by_age <- atus.all %>%
+  group_by(TEAGE) %>%
+  summarize(n_minutes = mean(CHILDCARE))
+#care_by_age
+ggplot(data = care_by_age) +
+  geom_line(aes(x = TEAGE, y = n_minutes))
+## Do richer people spend more time with their children compared to poorer people?
+#colnames(atus.all)
+#head(atus.all)
+ggplot(atus.all, aes(x = TRERNWA, y = CHILDCARE)) +
+  geom_boxplot(fill="skyblue", aes(group = cut_width(TRERNWA, 50000.0)))
+## Do married couples spend more time with their children compared to single parents?
+table(atus.all$TRSPPRES)
+atus.all <- atus.all %>%
+  mutate(marital_status = factor(TRSPPRES))
+library(plyr)
+marital_factor <- mapvalues(atus.all$marital_status, from = c("1", "2", "3"),
+                            to = c("married", "unmarried", "single"))
+atus.all <- atus.all %>%
+  mutate(marital_status = marital_factor)
+head(atus.all$marital_status)
+ggplot(atus.all, aes(x = marital_status, y = CHILDCARE)) + 
+  geom_boxplot()
+## Do full-time workers spend more time with their children compared to part-time workers?
+employment_factor <- mapvalues(atus.all$TRDPFTPT, from = c("1", "2"),
+                            to = c("full-time", "part-time"))
+ggplot(atus.all, aes(x = factor(TRDPFTPT), y = CHILDCARE)) + 
+  geom_boxplot()
 ```
 
 ### Regression Analysis
 
 ```{r reg-analysis}
-## add your regression analysis code here
-reg_model <- lm()
+## Run a linear regression of marital status, age, sex, number of children (18 or younger), earnings, and full-time versus part-time status
+reg_model <- lm(CHILDCARE ~ TEAGE + TESEX + TRCHILDNUM +
+                  HEFAMINC + TRDPFTPT, data = atus.all)
 summary(reg_model)
 ```
 
