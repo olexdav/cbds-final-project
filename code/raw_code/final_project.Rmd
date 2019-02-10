@@ -2,12 +2,14 @@
 title: "final_project"
 author: "Oleksii Davydenko"
 date: "2018/1/13"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 ## install packages if necessary
-list.of.packages <- c("janitor", "ggplot2", "dplyr", "lubridate", "zoo", "forcats", "ggthemes", "knitr", "rmarkdown")
+list.of.packages <- c("janitor", "ggplot2", "dplyr", "lubridate", "zoo", "forcats", "ggthemes", "knitr", "rmarkdown", "car")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -23,6 +25,7 @@ library(ggthemes)
 library(knitr)
 library(tidyr)
 library(reshape2)
+library(car)
 
 ## set working directory
 knitr::opts_knit$set(root.dir = '/cloud/project/cbds-final-project')
@@ -62,14 +65,15 @@ atus.all <- atus.sum %>%
 ### Exploratory Analysis of Child Care Data
 
 ```{r initial-exploration}
-head(atus.sum)
-head(atus.cps)
+#head(atus.sum)
+#head(atus.cps)
 # average time socializing and communicating with others 
-head(mean(atus.all$t120101))
+mean(atus.all$t120101)
 ```
 
 
 ```{r creating-childcare-var}
+# childcare is the sum of all activities starting with 't03'
 atus.all <- atus.all %>% 
     mutate(CHILDCARE = t030101+t030102+t030103+t030104+t030105
            +t030106+t030108+t030109+t030110+t030111+t030112+t030199)
@@ -81,17 +85,13 @@ ggplot(atus.all) +
 ```
 
 ```{r gender-analysis}
-#colnames(atus.all)
-#head(atus.cps)
 atus.all %>% 
-    group_by(TESEX) %>% 
+    group_by(TESEX) %>% # 1 = male, 2 = female
     summarize(n_minutes=mean(CHILDCARE))
 ```
 
 ```{r replacing-na}
 ## replace -1 in the variable TRDPFTPT with NA.
-#table(atus.all$TRDPFTPT)
-#head(atus.all$TRDPFTPT)
 atus.all <- atus.all %>% mutate(TRDPFTPT = replace(TRDPFTPT, TRDPFTPT == -1, NA))
 ```
 
@@ -107,8 +107,6 @@ care_by_age <- atus.all %>%
 ggplot(data = care_by_age) +
   geom_line(aes(x = TEAGE, y = n_minutes))
 ## Do richer people spend more time with their children compared to poorer people?
-#colnames(atus.all)
-#head(atus.all)
 ggplot(atus.all, aes(x = TRERNWA, y = CHILDCARE)) +
   geom_boxplot(fill="skyblue", aes(group = cut_width(TRERNWA, 50000.0)))
 ## Do married couples spend more time with their children compared to single parents?
@@ -120,7 +118,6 @@ marital_factor <- mapvalues(atus.all$marital_status, from = c("1", "2", "3"),
                             to = c("married", "unmarried", "single"))
 atus.all <- atus.all %>%
   mutate(marital_status = marital_factor)
-head(atus.all$marital_status)
 ggplot(atus.all, aes(x = marital_status, y = CHILDCARE)) + 
   geom_boxplot()
 ## Do full-time workers spend more time with their children compared to part-time workers?
@@ -133,7 +130,9 @@ ggplot(atus.all, aes(x = factor(TRDPFTPT), y = CHILDCARE)) +
 ### Regression Analysis
 
 ```{r reg-analysis}
-## Run a linear regression of marital status, age, sex, number of children (18 or younger), earnings, and full-time versus part-time status
+## Run a linear regression of marital status, age, sex,
+#  number of children (18 or younger), earnings,
+#  and full-time versus part-time status
 reg_model <- lm(CHILDCARE ~ TEAGE + TESEX + TRCHILDNUM +
                   HEFAMINC + TRDPFTPT, data = atus.all)
 summary(reg_model)
@@ -142,7 +141,6 @@ summary(reg_model)
 ### Exploratory Analysis of Age and Activities
 
 ```{r activity-cats}
-#glimpse(atus.all)
 atus.wide <- atus.all %>%
   mutate(act01 = rowSums(atus.all[, grep("t01", names(atus.all))]),
          act02 = rowSums(atus.all[, grep("t02", names(atus.all))]),
@@ -168,39 +166,38 @@ summary(atus.wide)
 ```
 
 ```{r wide-to-long}
+## use code to convert the wide format to long
 atus.long <- atus.wide %>% melt(., id.vars = c("TUCASEID", "TEAGE", "HEFAMINC"))
 names(atus.long) <- c("TUCASEID", "TEAGE", "HEFAMINC", "ACTIVITY", "MINS")
-  # use code to convert the wide format to long.
 summary(atus.long)
 glimpse(atus.long)
-#head(atus.long)
 ```
 
+#### How does time doing certain activities vary by age?
+
 ```{r age-activity}
-#atus.long$ACTIVITY <- NULL
-head(atus.long)
-atus.long[3000:3010,]
-#atus.long %>% group_by(TEAGE) %>% dplyr::summarize(asd = n())
+# summarize average time per activity for each age
 avgmin_data <- atus.long %>% 
     group_by(ACTIVITY, TEAGE) %>% 
     dplyr::summarise(AVGMINS = mean(MINS))
-levels(avgmin_data$ACTIVITY) <- c("Personal Care",
-                                  "Household Activities",
-                                  "Help Household Members",
-                                  "Help Non-HH Members",
-                                  "Work",
-                                  "Education",
-                                  "Consumer Purchases",
-                                  "Professional Services",
-                                  "Household Services",
-                                  "Civic Obligations",
-                                  "Eating and Drinking",
-                                  "Socializing and Leisure",
-                                  "Sports and Exercise",
-                                  "Spiritual Activities",
-                                  "Volunteer Activities",
-                                  "Telephone Calls",
-                                  "Traveling")
+activity_names <- c("Personal Care",
+                    "Household Activities",
+                    "Help Household Members",
+                    "Help Non-HH Members",
+                    "Work",
+                    "Education",
+                    "Consumer Purchases",
+                    "Professional Services",
+                    "Household Services",
+                    "Civic Obligations",
+                    "Eating and Drinking",
+                    "Socializing and Leisure",
+                    "Sports and Exercise",
+                    "Spiritual Activities",
+                    "Volunteer Activities",
+                    "Telephone Calls",
+                    "Traveling")
+levels(avgmin_data$ACTIVITY) <- activity_names
 # bin ages into groups
 avgmin_data <- cbind(avgmin_data, AGE_BIN=cut(avgmin_data$TEAGE,
                                               breaks=c(14,25,35,45,55,65,75,85))) 
@@ -212,12 +209,70 @@ avgmin_data %>% ggplot() +
 ### Exploratory Analysis of Income and Activities
 
 ```{r activity-income}
-atus.long %>% 
+# Get average amount of minutes spent per activity in each income group
+income_data <- atus.long %>% 
   group_by(ACTIVITY, HEFAMINC) %>% 
-  ## add the rest of the code here
+  dplyr::summarize(AVGMINS = mean(MINS))
+# properly name activities
+levels(income_data$ACTIVITY) <- activity_names
+# group 16 income categories into 6 bins
+income_data <- income_data %>%
+  mutate(INCOME = car::recode(HEFAMINC, paste("c(1, 2, 3)='Less than $10,000'",
+                                              "c(4, 5, 6) = '$10,000 - $20,000'",
+                                              "c(7, 8, 9) = '$20,000 - $35,000'",
+                                              "c(10, 11, 12) = '$35,000 - $60,000'",
+                                              "c(13, 14) = '$60,000 - $100,000'",
+                                              "c(15, 16) = '$100,000 and over'",
+                                              sep = ";")))
+income_data$INCOME <- factor(income_data$INCOME)
+income_categories <- c("Less than $10,000", "$10,000 - $20,000",
+                       "$20,000 - $35,000", "$35,000 - $60,000",
+                       "$60,000 - $100,000", "$100,000 and over")
+levels(income_data$INCOME) <- rev(income_categories)
+# group by newly binned income categories
+income_data <- income_data %>%
+  group_by(ACTIVITY, INCOME) %>%
+  dplyr::summarize(AVGMINS = mean(AVGMINS))
+
+# Convert minutes to ratio of time spent by people in 
+# this income category / total activity time
+activity_mins <- income_data %>% group_by(ACTIVITY) %>%
+  dplyr::summarize(TOTALMINS = sum(AVGMINS))
+income_data <- merge(income_data, activity_mins, by = "ACTIVITY") %>%
+  mutate(TIMERATIO = AVGMINS/TOTALMINS) %>%
+  select(ACTIVITY, INCOME, TIMERATIO)
+
+# Get data about activities done by people with income <$35,000
+below_median_activities <- income_data[income_data$INCOME %in% c("Less than $10,000",
+                                                                 "$10,000 - $20,000",
+                                                                 "$20,000 - $35,000"),] %>%
+  group_by(ACTIVITY) %>% dplyr::summarize(TIME = sum(TIMERATIO))
+# reorder activities by popularity among the rich
+new_order <- order(-below_median_activities$TIME)
+below_median_activities <- below_median_activities[new_order,]
+income_data$ACTIVITY = factor(income_data$ACTIVITY,levels(income_data$ACTIVITY)[new_order])
+
+## Plot data
+income_plot <- income_data %>% 
+  ggplot(aes(x = ACTIVITY, y = TIMERATIO, fill = INCOME)) +
+  geom_bar(stat = "identity", position = "fill") +
+  coord_flip() +
+  scale_fill_brewer(palette="BrBG") + # color theme
+  labs(title="Americans' Activities Distributed by Income",
+       subtitle="From a survey of 10493 Americans' time use",
+       caption="Source: American Time Use Survey, 2016",
+       fill="Income") + # legend title
+  ylab("Relative time spent on average") +
+  xlab("") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 10),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_blank())
+income_plot
 ```
 
 
-```{r save-plot}
-## save the plot above
+```{r save-plot, results = "hide"}
+ggsave("figures/explanatory_figures/activities-by-income.png", plot=income_plot)
 ```
