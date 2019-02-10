@@ -14,12 +14,15 @@ if(length(new.packages)) install.packages(new.packages)
 ## load packages
 library(janitor)
 library(ggplot2)
+library(plyr)
 library(dplyr)
 library(lubridate)
 library(zoo)
 library(forcats)
 library(ggthemes)
 library(knitr)
+library(tidyr)
+library(reshape2)
 
 ## set working directory
 knitr::opts_knit$set(root.dir = '/cloud/project/cbds-final-project')
@@ -59,10 +62,10 @@ atus.all <- atus.sum %>%
 ### Exploratory Analysis of Child Care Data
 
 ```{r initial-exploration}
-glimpse(atus.sum)
-glimpse(atus.cps)
+head(atus.sum)
+head(atus.cps)
 # average time socializing and communicating with others 
-mean(atus.all$t120101)
+head(mean(atus.all$t120101))
 ```
 
 
@@ -99,7 +102,7 @@ atus.all <- atus.all %>%
 ## Do younger parents spend more time with their children?
 care_by_age <- atus.all %>%
   group_by(TEAGE) %>%
-  summarize(n_minutes = mean(CHILDCARE))
+  dplyr::summarize(n_minutes = mean(CHILDCARE))
 #care_by_age
 ggplot(data = care_by_age) +
   geom_line(aes(x = TEAGE, y = n_minutes))
@@ -139,38 +142,71 @@ summary(reg_model)
 ### Exploratory Analysis of Age and Activities
 
 ```{r activity-cats}
+#glimpse(atus.all)
 atus.wide <- atus.all %>%
-    mutate(act01 = ,
-           act02 = ,
-           act03 = ,
-           act04 = ,
-           act05 = ,
-           act06 = ,
-           act07 = ,
-           act08 = ,
-           act09 = ,
-           act10 = ,
-           act11 = ,
-           act12 = ,
-           act13 = ,
-           act14 = ,
-           act15 = ,
-           act16 = ,
-           # act17 = , there is no category 17 in the data
-           act18 = ) %>% 
-    select(TUCASEID, TEAGE, HEFAMINC, starts_with("act"))
+  mutate(act01 = rowSums(atus.all[, grep("t01", names(atus.all))]),
+         act02 = rowSums(atus.all[, grep("t02", names(atus.all))]),
+         act03 = rowSums(atus.all[, grep("t03", names(atus.all))]),
+         act04 = rowSums(atus.all[, grep("t04", names(atus.all))]),
+         act05 = rowSums(atus.all[, grep("t05", names(atus.all))]),
+         act06 = rowSums(atus.all[, grep("t06", names(atus.all))]),
+         act07 = rowSums(atus.all[, grep("t07", names(atus.all))]),
+         act08 = rowSums(atus.all[, grep("t08", names(atus.all))]),
+         act09 = rowSums(atus.all[, grep("t09", names(atus.all))]),
+         act10 = rowSums(atus.all[, grep("t10", names(atus.all))]),
+         act11 = rowSums(atus.all[, grep("t11", names(atus.all))]),
+         act12 = rowSums(atus.all[, grep("t12", names(atus.all))]),
+         act13 = rowSums(atus.all[, grep("t13", names(atus.all))]),
+         act14 = rowSums(atus.all[, grep("t14", names(atus.all))]),
+         act15 = rowSums(atus.all[, grep("t15", names(atus.all))]),
+         act16 = rowSums(atus.all[, grep("t16", names(atus.all))]),
+         # act17 = , there is no category 17 in the data
+         act18 = rowSums(atus.all[, grep("t18", names(atus.all))])
+         ) %>%
+  select(TUCASEID, TEAGE, HEFAMINC, starts_with("act"))
+summary(atus.wide)
 ```
 
 ```{r wide-to-long}
-atus.long <- atus.wide %>% 
+atus.long <- atus.wide %>% melt(., id.vars = c("TUCASEID", "TEAGE", "HEFAMINC"))
+names(atus.long) <- c("TUCASEID", "TEAGE", "HEFAMINC", "ACTIVITY", "MINS")
   # use code to convert the wide format to long.
+summary(atus.long)
+glimpse(atus.long)
+#head(atus.long)
 ```
 
 ```{r age-activity}
-atus.long %>% 
+#atus.long$ACTIVITY <- NULL
+head(atus.long)
+atus.long[3000:3010,]
+#atus.long %>% group_by(TEAGE) %>% dplyr::summarize(asd = n())
+avgmin_data <- atus.long %>% 
     group_by(ACTIVITY, TEAGE) %>% 
-    summarise(AVGMINS = mean(MINS)) %>% 
-    ggplot() +
+    dplyr::summarise(AVGMINS = mean(MINS))
+levels(avgmin_data$ACTIVITY) <- c("Personal Care",
+                                  "Household Activities",
+                                  "Help Household Members",
+                                  "Help Non-HH Members",
+                                  "Work",
+                                  "Education",
+                                  "Consumer Purchases",
+                                  "Professional Services",
+                                  "Household Services",
+                                  "Civic Obligations",
+                                  "Eating and Drinking",
+                                  "Socializing and Leisure",
+                                  "Sports and Exercise",
+                                  "Spiritual Activities",
+                                  "Volunteer Activities",
+                                  "Telephone Calls",
+                                  "Traveling")
+# bin ages into groups
+avgmin_data <- cbind(avgmin_data, AGE_BIN=cut(avgmin_data$TEAGE,
+                                              breaks=c(14,25,35,45,55,65,75,85))) 
+avgmin_data %>% ggplot() + 
+  geom_line(aes(x = TEAGE, y = AVGMINS)) +
+  facet_wrap(. ~ ACTIVITY)
 ```
 
 ### Exploratory Analysis of Income and Activities
